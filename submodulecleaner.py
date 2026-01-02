@@ -149,6 +149,11 @@ class GitSubmoduleCleaner(SubmoduleHandler):
 Do first:
     git submodule deinit -f {self.subm_name}""")
             return False
+        uops, lst = nested_submodules(self.repo, self._submodule)
+        if uops:
+            print(f"The submodule ('{self.subm_name}') has nested submodules!", end="\n\n")
+            print('\n'.join(lst), end="\n+++\n")
+            return False
         if confirm:
             if not self.do_confirm(f"About to delete: {full}"):
                 return False
@@ -171,6 +176,18 @@ def is_initialized(repo, submodule_path):
     cfg = repo.config_reader()
     section = f'submodule "{submodule_path}"'
     return cfg.has_section(section)
+
+def nested_submodules(repo, subm) -> tuple:
+    """ Path to the submodule's internal metadata directory """
+    module_dir = os.path.join(repo.git_dir, "modules", subm.path)
+    # Nested submodules live here:
+    nested_dir = os.path.join(module_dir, "modules")
+    lst = os.scandir(nested_dir)
+    tup = (
+        os.path.isdir(nested_dir) and any(lst),
+        [os.path.realpath(aba) for aba in lst],
+    )
+    return tup
 
 
 if __name__ == "__main__":
