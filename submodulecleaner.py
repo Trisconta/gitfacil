@@ -59,10 +59,12 @@ class GenericRun:
             return path
         return path.replace("/", "\\")
 
-    def do_confirm(self, msg):
+    def do_confirm(self, msg, ask=""):
         if msg:
             print(msg)
-        answer = input("Proceed? [y/N]: ").strip().lower()
+        if not ask:
+            ask = "Proceed? [y/N]: "
+        answer = input(ask).strip().lower()
         return answer == "y"
 
 
@@ -75,7 +77,8 @@ class SubmoduleHandler(GenericRun):
         self.subm_name = submodule
         self._submodule = repo.submodule(submodule) if submodule else None
         self._subm_dct = {
-            sm.path: (sm.branch_path, is_initialized(self.repo, sm.name), sm) for sm in self.repo.submodules
+            sm.path: (sm.branch_path, is_initialized(self.repo, sm.name), sm)
+            for sm in self.repo.submodules
         }
 
     def still_there(self):
@@ -145,11 +148,21 @@ class GitSubmoduleCleaner(SubmoduleHandler):
             print(f"Could not find: {full}")
             return False
         if self.submodule_initialized():
-            print(f"""Cowardly refusing to clean an initialized submodule: {full}\n
-Do first:
-    git submodule deinit -f {self.subm_name}""")
-            return False
-        uops, lst = nested_submodules(self.repo, self._submodule)
+            if not self.do_confirm(
+                f"De-initialize the submodule first: {self.subm_name}",
+                "Are you sure? [y/N] ",
+            ):
+                return False
+            msg = deinit_submodule(self.repo, self.subm_name)
+            if msg:
+                print(msg)
+                return False
+        else:
+            msg = "OK"
+        if msg:
+            uops, lst = nested_submodules(self.repo, self._submodule)
+        else:
+            uops, lst = False, []
         if uops:
             print(f"The submodule ('{self.subm_name}') has nested submodules!", end="\n\n")
             print('\n'.join(lst), end="\n+++\n")
@@ -188,6 +201,28 @@ def nested_submodules(repo, subm) -> tuple:
         [os.path.realpath(aba) for aba in lst],
     )
     return tup
+
+
+def deinit_submodule(repo, sub_path):
+    """ Deinit a submodule if it is registered and initialized.
+
+    Parameters
+    ----------
+    repo : git.Repo
+        An already-initialized GitPython Repo instance.
+    sub_path : str or Path
+        Path to the submodule relative to the repo root.
+    """
+    # Detect submodule by path
+    submodules = {sbm.path: sbm for sbm in repo.submodules}
+    if sub_path not in submodules:
+        return f"Submodule '{sub_path}' not registered"
+    sbm = submodules[sub_path]
+    # Check if initialized (i.e., has a working tree)
+    if not sbm.module_exists():
+        return f"Submodule '{sub_path}' is not initialized"
+    repo.git.submodule("deinit", "-f", sub_path)
+    return ""
 
 
 if __name__ == "__main__":
