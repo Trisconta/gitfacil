@@ -8,6 +8,7 @@
 import sys
 import os
 import subprocess
+import git
 from git import Repo
 
 
@@ -192,10 +193,20 @@ def is_initialized(repo, submodule_path):
 
 def nested_submodules(repo, subm) -> tuple:
     """ Path to the submodule's internal metadata directory """
-    module_dir = os.path.join(repo.git_dir, "modules", subm.path)
+    assert isinstance(subm, git.objects.submodule.base.Submodule), f"Unexpected type: {subm}, {type(subm)}"
+    module_dir = os.path.join(repo.git_dir, "modules", str(subm.path))
     # Nested submodules live here:
     nested_dir = os.path.join(module_dir, "modules")
-    lst = os.scandir(nested_dir)
+    try:
+        lst = os.scandir(nested_dir)
+    except FileNotFoundError as err:
+        print(f"Warning: {p_path(nested_dir)}: {err}")
+        lst = None
+    if lst is None:
+        return (
+            False,
+            [],
+        )
     tup = (
         os.path.isdir(nested_dir) and any(lst),
         [os.path.realpath(aba) for aba in lst],
