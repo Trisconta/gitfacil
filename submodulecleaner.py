@@ -32,12 +32,17 @@ submodule is a GIT submodule path within current repo.
             print(key, item, end="\n\n")
         return None
     isok = submodule_delete(subm)
+    if isok is None:
+        return False
     print("Deleted submodule(s):", "OK" if isok else "NotOk", subm)
     return isok
 
 
 def submodule_delete(subm):
     obj = GitSubmoduleCleaner(subm)
+    if obj.message:
+        print(obj.message, f"(requested: {obj.subm_name})")
+        return None
     inited = obj.submodule_initialized()
     print(obj.path, "; submodule_initialized() ?", obj.subm_name, inited)
     #print(obj.repo)
@@ -73,9 +78,20 @@ class SubmoduleHandler(GenericRun):
     """ GIT submodule handler class. """
     def __init__(self, submodule="", path=""):
         super().__init__(path if path else p_path(os.getcwd()))
-        repo = Repo(self.path)
+        try:
+            repo = Repo(self.path)
+        except git.exc.InvalidGitRepositoryError:
+            repo = None
         self.repo = repo
         self.subm_name = submodule
+        if repo is None:
+            msg = f"Not a repo: {self.path}"
+        else:
+            msg = ""
+        self.message = msg
+        self._submodule, self._subm_dct = None, None
+        if msg:
+            return
         self._submodule = repo.submodule(submodule) if submodule else None
         self._subm_dct = {
             sm.path: (sm.branch_path, is_initialized(self.repo, sm.name), sm)
